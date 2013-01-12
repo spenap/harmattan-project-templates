@@ -1,0 +1,17 @@
+#include <QApplication>
+#include <QDeclarativeContext>
+#include <QDeclarativeView>
+
+#include "#MAINHEADER#"
+
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+    QDeclarativeView view;
+    view.setSource(QUrl::fromLocalFile("/usr/share/#BINARYNAME#/#BINARYNAME#.qml"));
+    QObject *rootObject = (QObject*)(view.rootObject());
+    #CLASSNAME# p(rootObject);
+    view.rootContext()->setContextProperty("#CLASSNAME#", &p);
+    view.showFullScreen();
+    return app.exec();
+}

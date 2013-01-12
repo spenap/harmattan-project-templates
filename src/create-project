@@ -1,0 +1,671 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+'''Harmattan project creator'''
+
+# This file is part of Maemo SDK
+#
+# Copyright (C) 2011 Nokia Corporation and/or its subsidiary(-ies).
+#
+# Contact: juha-pekka.jokela@tieto.com
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 2 of the License, or (at your option) any later
+# version. This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+# details. You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+import os
+import re
+import sys
+import stat
+import time
+
+from optparse import OptionParser
+from datetime import datetime
+
+try:
+    import email.utils
+
+except ImportError, e:
+    # If email.utils module is not available, we need to use time instead
+    has_emailutils = False
+
+else:
+    has_emailutils = True
+
+TEMPLATE_PATH = "/usr/share/project-templates/templates/"
+
+MY_NAME = 'Harmattan project creator'
+MY_VERSION = "0.11.0"
+
+DEFAULT_CLASSNAME = "MyClass"
+DEFAULT_PACKAGENAME = "mypackage"
+DEFAULT_VERSION = "0.1"
+
+MAX_NAME_LEN=255
+
+def ask_question(question, defaultanswer = ""):
+    '''Asks specified question with defined default answer'''
+    if defaultanswer:
+        question = '%s [%s]:' % (question, defaultanswer)
+
+    else:
+        question = '%s:' % question
+
+    reply = raw_input(question)
+    # If user just pressed enter, return default answer
+    if not reply:
+        reply = defaultanswer
+
+    return reply
+
+def is_valid_length(string, minlength, maxlength):
+    '''Returns true if string length is within the limits'''
+    return len(string) <= maxlength and len(string) >= minlength
+
+def get_valid_classname(name):
+    '''Return valid class name based on given string (removes illegal chars) - if not possible, returns default'''
+    classname = re.sub(r'\W+', '', name)
+    # Remove numbers from beginning
+    while classname[0:1].isdigit():
+        classname = classname[1:]
+    # If string length after removing illegal chars is >0 use it, otherwise use "MyClass"
+    if is_valid_length(classname, 1, MAX_NAME_LEN - 4):
+        return classname
+
+    return DEFAULT_CLASSNAME
+
+
+def is_valid_classname(name):
+    '''Return True if given string is a valid class / function name'''
+    # Allowed: upper- and lowercase letters, _ and numbers. May not start with a number.
+    if is_valid_length(name, 1, MAX_NAME_LEN - 4) and re.match("[a-zA-Z_]+[a-zA-Z0-9_]+$", name):
+        return True
+
+    return False
+
+
+def get_valid_iconname(name):
+    '''Return valid icon name based on given string (removes illegal chars) - if not possible, returns default'''
+    iconname = re.sub(r'[^a-z0-9\-_.]', '', name.lower())
+    if is_valid_length(iconname, 1, MAX_NAME_LEN - 4):
+        return iconname
+
+    return "icon"
+
+def is_valid_iconname(name):
+    '''Return True if given string is a valid icon name'''
+    # Allowed: lowercase letters, numbers, . _ and -
+    if is_valid_length(name, 1, MAX_NAME_LEN - 4) and re.match("[a-z0-9\-_.]+$", name):
+        return True
+
+    return False
+
+def is_valid_packagename(name):
+    '''Return True if given string is a valid package name'''
+    # Allowed: lowercase letters, numbers, + and -
+    if is_valid_length(name, 1, MAX_NAME_LEN - 26) and re.match("[a-z0-9]+[a-z0-9\-+]+$", name):
+        return True
+
+    return False
+
+def get_valid_packagename(name):
+    '''Return valid package name based on given string (removes illegal chars, makes upper case lower) - if not possible, returns default'''
+    packagename = re.sub(r'[^a-z0-9\-+]', '', name.lower())
+    while not packagename[0:1].isalnum():
+        packagename = packagename[1:]
+
+    if len(packagename) > 1:
+        return packagename[:MAX_NAME_LEN-26]
+
+    return DEFAULT_PACKAGENAME
+
+
+def is_valid_binaryname(name):
+    '''Return True if given name is a valid binary name'''
+    if is_valid_length(name, 1, MAX_NAME_LEN):
+        if re.match('[A-Za-z0-9.\-]+$', name):
+            if name.endswith('.') or name.startswith('.'):
+                # dbus names may not start or end with .
+                return False
+
+            return True
+
+    return False
+
+
+def get_valid_binaryname(name):
+    '''Return valid binary name based on given string (removes illegal chars) - if not possible, returns default'''
+    binaryname = name.replace('+', 'p')
+    binaryname = re.sub(r'[^A-Za-z0-9.\-]', '', binaryname)
+    # Remove '.' from beginning
+    while len(binaryname) > 0 and binaryname.startswith('.'):
+        binaryname = binaryname[1:]
+
+    binaryname = binaryname[:MAX_NAME_LEN]
+    # Remove '.' from end
+    while len(binaryname) > 0 and binaryname.endswith('.'):
+        binaryname = binaryname[:len(binaryname)-1]
+
+    if len(binaryname) > 0:
+        return binaryname
+
+    return ''
+
+
+def show_overview(path, projectname, binaryname, packagename, iconname, projectdir, classname, maintainer, emailaddress):
+    '''Show general overview of what is going to be done, and ask for confirmation'''
+    print "\nOverview\n--------"
+    print "Destination path:", path
+    print "Project name:", projectname
+    print "Package name:", packagename
+    print "Icon name:", iconname
+    print "Binary name:", binaryname
+    print "Project directory:", os.path.join(path, projectdir)
+    print "Main class name:", classname
+    print "Maintainer:", maintainer
+    print "e-mail address:", emailaddress
+    reply = raw_input('Is this OK? Enter "y" to confirm, or anything else to abort:')
+    if not reply.lower() == 'y':
+        print "Aborted by user."
+        sys.exit(1)
+
+
+def create_main_cpp(path, windowtype, binaryname, classname, mainclassheader):
+    '''Create main.cpp'''
+    cpptemplate = os.path.join(TEMPLATE_PATH, windowtype, "src/main.cpp.template")
+    cppfile = os.path.join(path, "main.cpp")
+
+    # Create .cpp file from template
+    fi = open(cpptemplate, "r")
+    fo = open(cppfile, "w")
+    for line in fi:
+        line = line.replace('#CLASSNAME#', classname)
+        line = line.replace('#MAINHEADER#', mainclassheader)
+        line = line.replace('#BINARYNAME#', binaryname)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def create_main_class(path, windowtype, classname, windowtitle):
+    '''Create files for main class'''
+    cpptemplate = os.path.join(TEMPLATE_PATH, windowtype, "src/mainclass.cpp.template")
+    htemplate = os.path.join(TEMPLATE_PATH, windowtype, "src/mainclass.h.template")
+
+    filename = classname.lower()
+
+    cppfile = os.path.join(path, filename + ".cpp")
+    hfile = os.path.join(path, filename + ".h")
+
+    mainheader = filename + ".h"
+    headerblock = mainheader.upper().replace(".", "_")
+
+    # Create .cpp file from template
+    fi = open(cpptemplate, "r")
+    fo = open(cppfile, "w")
+    for line in fi:
+        line = line.replace('#CLASSNAME#', classname)
+        line = line.replace('#MAINHEADER#', mainheader)
+        line = line.replace('#WINDOWTITLE#', windowtitle)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+    # Create .h from template
+    fi = open(htemplate, "r")
+    fo = open(hfile, "w")
+    for line in fi:
+        line = line.replace('#CLASSNAME#', classname)
+        line = line.replace('#HEADERBLOCK#', headerblock)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def create_qml_file(path, binaryname, templatetype, windowtitle):
+    '''Create qml ui file for project'''
+    qmltemplate = os.path.join(TEMPLATE_PATH, templatetype, "src/project.qml.template")
+
+    filename = binaryname.lower()
+
+    qmlfile = os.path.join(path, filename + ".qml")
+
+    # Create .qml file from template
+    fi = open(qmltemplate, "r")
+    fo = open(qmlfile, "w")
+    for line in fi:
+        line = line.replace('#WINDOWTITLE#', windowtitle)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def create_project_file(path, binaryname, classfile, windowtype):
+    '''Creates working .pro files that can be used to compile the project'''
+    protemplate = os.path.join(TEMPLATE_PATH, windowtype, "src/src.pro.template")
+    outfile = os.path.join(path, "src/src.pro")
+
+    headersline = "HEADERS += %s.h" % classfile
+    sourcesline = "SOURCES += main.cpp %s.cpp" % classfile
+
+    # Create .pro file in src directory
+    fi = open(protemplate, "r")
+    fo = open(outfile, "w")
+    for line in fi:
+        line = line.replace('#TARGETNAME#', binaryname)
+        line = line.replace('#BINARYNAME#', binaryname)
+        line = line.replace('#HEADERS#', headersline)
+        line = line.replace('#SOURCES#', sourcesline)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+    protemplate = os.path.join(TEMPLATE_PATH, windowtype, "project.pro.template")
+    outfile = os.path.join(path, "%s.pro" % binaryname)
+    # Create .pro file in project directory
+    fi = open(protemplate, "r")
+    fo = open(outfile, "w")
+    for line in fi:
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def create_makefile(path, binaryname, templatetype):
+    '''Creates working Makefile that can be used to install the project'''
+    makefiletemplate = os.path.join(TEMPLATE_PATH, templatetype, "Makefile.template")
+    outfile = os.path.join(path, "Makefile")
+
+    # Create Makefile in project directory
+    fi = open(makefiletemplate, "r")
+    fo = open(outfile, "w")
+    for line in fi:
+        line = line.replace('#BINARYNAME#', binaryname)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def debianize_project(path, windowtype, packagename, maintainer, emailaddress):
+    '''Debianizes project with dh_make'''
+    dt = datetime.now()
+    version = DEFAULT_VERSION
+    year = str(dt.year)
+    if has_emailutils:
+        date = email.utils.formatdate(localtime = time.localtime())
+
+    else:
+        # email.utils not present
+        minutes = -time.altzone / 60
+        hours = minutes / 60
+        minutes -= hours * 60
+        minutes = abs(minutes)
+        date = "%s %+03d%02d" % (dt.strftime("%a, %d %b %Y %H:%M:%S"), hours, minutes)
+
+    # Create debian/rules
+    os.mkdir(os.path.join(path, 'debian'))
+    oldfile = os.path.join(TEMPLATE_PATH, windowtype, "debian/rules.template")
+    newfile = os.path.join(path, "debian/rules")
+    fi = open(oldfile, "r")
+    fo = open(newfile, "w")
+    for line in fi:
+        line = line.replace('#PACKAGENAME#', packagename)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+    os.chmod(newfile, stat.S_IEXEC | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH | stat.S_IWUSR)
+
+    # Create debian/control
+    oldfile = os.path.join(TEMPLATE_PATH, windowtype, "debian/control.template")
+    newfile = os.path.join(path, "debian/control")
+    fi = open(oldfile, "r")
+    fo = open(newfile, "w")
+    for line in fi:
+        line = line.replace('#PACKAGENAME#', packagename)
+        line = line.replace('#MAINTAINER#', maintainer)
+        line = line.replace('#EMAIL#', emailaddress)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+    # Create debian/changelog
+    oldfile = os.path.join(TEMPLATE_PATH, windowtype, "debian/changelog.template")
+    newfile = os.path.join(path, "debian/changelog")
+    fi = open(oldfile, "r")
+    fo = open(newfile, "w")
+    for line in fi:
+        line = line.replace('#PACKAGENAME#', packagename)
+        line = line.replace('#MAINTAINER#', maintainer)
+        line = line.replace('#EMAIL#', emailaddress)
+        line = line.replace('#DATE#', date)
+        line = line.replace('#VERSION#', version)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+    # Create debian/compat
+    newfile = os.path.join(path, "debian/compat")
+    fo = open(newfile, "w")
+    fo.write("7\n")
+    fo.close()
+
+    # Create debian/copyright
+    oldfile = os.path.join(TEMPLATE_PATH, windowtype, "debian/copyright.template")
+    newfile = os.path.join(path, "debian/copyright")
+    fi = open(oldfile, "r")
+    fo = open(newfile, "w")
+    for line in fi:
+        line = line.replace('#MAINTAINER#', maintainer)
+        line = line.replace('#EMAIL#', emailaddress)
+        line = line.replace('#DATE#', date)
+        line = line.replace('#YEAR#', year)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+    # Create debian/README
+    oldfile = os.path.join(TEMPLATE_PATH, windowtype, "debian/README.template")
+    newfile = os.path.join(path, "debian/README")
+    fi = open(oldfile, "r")
+    fo = open(newfile, "w")
+    for line in fi:
+        line = line.replace('#PACKAGENAME#', packagename)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+    # Create debian/README
+    oldfile = os.path.join(TEMPLATE_PATH, windowtype, "debian/README.Debian.template")
+    newfile = os.path.join(path, "debian/README.Debian")
+    fi = open(oldfile, "r")
+    fo = open(newfile, "w")
+    for line in fi:
+        line = line.replace('#PACKAGENAME#', packagename)
+        line = line.replace('#MAINTAINER#', maintainer)
+        line = line.replace('#EMAIL#', emailaddress)
+        line = line.replace('#DATE#', date)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def create_desktop_file(path, programname, binaryname, iconname, windowtype):
+    '''Creates desktop file for the project'''
+    templatefile = os.path.join(TEMPLATE_PATH, windowtype, "src/project.desktop.template")
+    outfile = os.path.join(path, 'src/%s.desktop' % binaryname)
+    fi = open(templatefile, "r")
+    fo = open(outfile, "w")
+    for line in fi:
+        line = line.replace('#PROGNAME#', programname)
+        line = line.replace('#BINARYNAME#', binaryname)
+        line = line.replace('#ICONNAME#', iconname)
+        fo.write(line)
+
+    fo.close()
+    fi.close()
+
+
+def new_project(fullpath, projectdir, templatetype, programname, binaryname, classname, packagename, iconname, maintainer, emailaddress, quiet):
+    '''Creates project from template to given path'''
+    if os.path.exists(fullpath):
+        projectdir = os.path.join(fullpath, projectdir)
+        try:
+            os.mkdir(projectdir)
+
+        except:
+            print 'ERROR: Failed to create project directory "%s"' % projectdir
+            sys.exit(2)
+
+        srcdir = os.path.join(projectdir, "src/")
+        try:
+            os.mkdir(srcdir)
+
+        except:
+            print 'ERROR: Failed to create src directory "%s"' % srcdir
+            sys.exit(2)
+
+        basefilename = programname.lower()
+        if templatetype == "meegotouch" or templatetype == "c++-qml":
+            create_main_cpp(srcdir, templatetype, binaryname, classname, classname.lower() + '.h')
+            create_main_class(srcdir, templatetype, classname, programname)
+            create_project_file(projectdir, binaryname, classname.lower(), templatetype)
+
+        if templatetype == "c++-qml":
+            create_qml_file(srcdir, binaryname, templatetype, programname)
+
+        debianize_project(projectdir, templatetype, packagename, maintainer, emailaddress)
+        create_desktop_file(projectdir, programname, binaryname, iconname, templatetype)
+
+    else:
+        print 'ERROR: Directory "%s" does not exist!' % fullpath
+        sys.exit(2)
+
+
+def main():
+    '''Main.'''
+    usage = "usage: %prog [options]"
+    optparser = OptionParser(usage = usage, version = "%prog " + MY_VERSION)
+    optparser.add_option("-p", "--path", dest="path",
+                         help="Specify the path, where you want to create new project.", metavar="PATH")
+    optparser.add_option("-t", "--type", dest="templatetype",
+                         help="Specify project type (c++-qml or meegotouch).", metavar="TYPE")
+    optparser.add_option("-n", "--name", dest="programname",
+                         help="Specify program name.", metavar="NAME")
+    optparser.add_option("-g", "--packagename", dest="packagename",
+                         help="Specify package name.", metavar="NAME")
+    optparser.add_option("-b", "--binaryname", dest="binaryname",
+                         help="Specify binary & project file name.", metavar="NAME")
+    optparser.add_option("-i", "--iconname", dest="iconname",
+                         help="Specify icon name. (excluding extension)", metavar="NAME")
+    optparser.add_option("-c", "--classname", dest="classname",
+                         help="Specify main class name.", metavar="NAME")
+    optparser.add_option("-m", "--maintainer", dest="maintainer",
+                         help="Maintainer name (for debian package).")
+    optparser.add_option("-e", "--email", dest="emailaddress",
+                         help="E-mail address (for debian package).")
+    optparser.add_option("-f", "--force", action="store_true", dest="force", default = False,
+                         help="Force project creation without asking for the final confirmation.")
+    optparser.add_option("-q", "--quiet", action="store_true", dest="quiet", default = False,
+                         help="Don't print any extra information.")
+    (options, args) = optparser.parse_args()
+
+    try:
+        # Check for illegal situations
+        # Validate binary name, if given on command line
+        if options.binaryname:
+            if not is_valid_binaryname(options.binaryname):
+                print '"%s"' % options.binaryname, "is not a valid binary name (only letters, numbers, - and . are allowed, max length %d)" % MAX_NAME_LEN
+                sys.exit(2)
+
+            given_binaryname = True
+        else:
+            given_binaryname = False
+
+        # Validate icon name, if given on command line
+        if options.iconname:
+            if not is_valid_iconname(options.iconname):
+                print '"%s"' % options.iconname, "is not a valid icon name (only lower case letters, numbers, _, - and . are allowed)"
+                sys.exit(2)
+
+            given_iconname = True
+
+        else:
+            given_iconname = False
+
+        projectdir = None
+
+        suggested_maintainer = ''
+        # Parse environment variables
+        for param in os.environ.keys():
+            if param == 'DEBFULLNAME':
+                suggested_maintainer = os.environ[param]
+                break
+
+        # Ask for missing information
+        if not options.path:
+            suggested_path = os.getcwd()
+            # If failed to get cwd for some reason, default to home dir
+            if not suggested_path:
+                suggested_path = "~/"
+
+            options.path = ask_question('Enter path where you want to create new project',
+                                        suggested_path)
+
+        # Make sure the specified path exists
+        if not os.path.exists(os.path.expanduser(options.path)):
+            print "Warning: path doesn't exist:", options.path
+            sys.exit(2)
+
+        if not options.templatetype:
+            options.templatetype = ask_question('Enter program type to create (c++-qml, meegotouch)',
+                                                defaultanswer = "c++-qml")
+            type_given = False
+        else:
+            type_given = True
+
+        if options.templatetype not in ['meegotouch', 'c++-qml']:
+            # Also accept c, q or m
+            if options.templatetype == 'c':
+                options.templatetype = 'c++-qml'
+
+            elif options.templatetype == 'm':
+                options.templatetype = 'meegotouch'
+
+            else:
+                print "Warning: Invalid type:", options.templatetype
+                sys.exit(2)
+
+        if not options.programname:
+            options.programname = ask_question('Enter program name', defaultanswer = "MyProgram")
+            if options.programname == "":
+                print "Warning: Empty program name specified"
+                sys.exit(2)
+
+        if not options.packagename:
+            # Not given on command line, ask user.
+            suggested_packagename = get_valid_packagename(options.programname)
+            options.packagename = ask_question('Enter package name', defaultanswer = suggested_packagename)
+            if not is_valid_packagename(options.packagename):
+                print '"%s"' % options.packagename, "is not a valid package name (only lower case letters, numbers, + and - are allowed. Must start with alphanumeric character, minimum length 2 characters, maximum length 251 characters)"
+                sys.exit(2)
+
+            projectdir = options.packagename + "-" + DEFAULT_VERSION
+            fullpath = os.path.join(os.path.expanduser(options.path), projectdir)
+            # Make sure project directory doesn't already exist
+            if os.path.exists(fullpath):
+                print "Warning, directory", fullpath, "already exists, aborting!"
+                sys.exit(2)
+        else:
+            # Validate package name, if given from command line.
+            if not is_valid_packagename(options.packagename):
+                print '"%s"' % options.packagename, ("is not a valid package name "
+                                                     "(only lower case letters, numbers, + and - are allowed. Must start with alphanumeric character, minimum length 2 characters)")
+                sys.exit(2)
+
+        if not options.binaryname:
+            options.binaryname = get_valid_binaryname(options.packagename)
+            if not options.binaryname:
+                given_binaryname = True
+                # Couldn't create valid binary name based on package name. Ask user.
+                options.binaryname = ask_question('Enter binary name')
+                if not is_valid_binaryname(options.binaryname):
+                    print '"%s"' % options.binaryname, ("is not a valid binary name "
+                                                        "(only letters, numbers, - and . are allowed, max length %d)" % MAX_NAME_LEN)
+                    sys.exit(2)
+
+        if not options.iconname:
+            options.iconname = get_valid_iconname(options.packagename)
+            if not options.iconname:
+                given_iconname = True
+                options.iconname = ask_question('Enter icon name (excluding extension)')
+                if not is_valid_iconname(options.iconname):
+                    print '"%s"' % options.iconname, ("is not a valid icon name "
+                                                      "(only lower case letters, numbers, _, - and . are allowed)")
+                    sys.exit(2)
+
+        if options.templatetype == "meegotouch" or options.templatetype == "c++-qml":
+            if not options.classname:
+                options.classname = ask_question('Enter main class name', "MainWindow")
+                if not is_valid_classname(options.classname):
+                    print ('Warning: "%s" is not a valid classname'
+                           ' (only letters, numbers and _ are allowed, may not begin with a number)' % options.classname)
+                    sys.exit(2)
+
+        if not options.maintainer:
+            options.maintainer = ask_question('Enter maintainer name (used for debian package)',
+                                              suggested_maintainer)
+            if options.maintainer == "":
+                print 'Warning: empty maintainer name specified, aborting!'
+                sys.exit(2)
+
+        if not options.emailaddress:
+            options.emailaddress = ask_question('Enter e-mail address (used for debian package)')
+            if options.emailaddress == "":
+                print 'Warning: empty e-mail address specified, aborting!'
+                sys.exit(2)
+
+        if not options.quiet:
+            exampleline = 'create-project -p "%s" -t %s -n "%s" -g %s -m "%s" -e %s' % \
+                          (options.path, options.templatetype, options.programname, \
+                           options.packagename, options.maintainer, options.emailaddress)
+            if options.classname:
+                exampleline += " -c %s" % options.classname
+
+            if given_binaryname:
+                exampleline += " -b %s" % options.binaryname
+
+            if given_iconname:
+                exampleline += " -i %s" % options.iconname
+
+            print "\nIn the future, you can do the same operation with the following command line:"
+            print exampleline
+
+        if not projectdir:
+            projectdir = options.packagename + "-" + DEFAULT_VERSION
+            fullpath = os.path.join(os.path.expanduser(options.path), projectdir)
+            if os.path.exists(fullpath):
+                print "Warning: directory %s already exists, aborting!" % fullpath
+                sys.exit(2)
+
+        # If not in force mode, print overview and ask for confirmation
+        if not options.force:
+            show_overview(options.path, options.programname, options.binaryname, options.packagename,
+                          options.iconname, projectdir, options.classname, options.maintainer, options.emailaddress)
+
+        new_project(os.path.expanduser(options.path), projectdir, options.templatetype,
+                    options.programname, options.binaryname, options.classname, options.packagename,
+                    options.iconname, options.maintainer, options.emailaddress, options.quiet)
+
+        # print some generic information after successful project creation, if not in quiet mode
+        if not options.quiet:
+            print "\nNew project successfully created in", options.path
+            print "\nBefore publishing you should do the following:"
+            print "-Add short and long package descriptions to debian/control"
+            print "-Add any dependencies and build dependencies to debian/control"
+            print "-Create icon for your project, matching the name defined in .desktop file"
+            print "-Update debian/README and debian/README.debian files (or remove, if empty)"
+            print "-Add suitable license text to project files"
+
+    except KeyboardInterrupt:
+        print "\nAborted by user"
+
+if __name__ == "__main__":
+    main()

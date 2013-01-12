@@ -1,0 +1,15 @@
+#ifndef #HEADERBLOCK#
+#define #HEADERBLOCK#
+
+#include <QObject>
+
+class #CLASSNAME# : public QObject
+{
+    Q_OBJECT
+
+public:
+    #CLASSNAME#(QObject *rootObject);
+    ~#CLASSNAME#();
+};
+
+#endif // #HEADERBLOCK#

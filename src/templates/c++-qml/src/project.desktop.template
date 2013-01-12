@@ -1,0 +1,10 @@
+[Desktop Entry]
+Encoding=UTF-8
+Version=0.1
+Name=#PROGNAME#
+GenericName=#PROGNAME#
+Comment=#PROGNAME#
+Exec=/usr/bin/single-instance /usr/bin/#BINARYNAME#
+Terminal=false
+Type=Application
+#Icon=#ICONNAME#

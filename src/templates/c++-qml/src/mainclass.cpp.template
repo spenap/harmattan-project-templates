@@ -1,0 +1,10 @@
+#include "#MAINHEADER#"
+
+#CLASSNAME#::#CLASSNAME#(QObject *rootObject)
+{
+}
+
+
+#CLASSNAME#::~#CLASSNAME#()
+{
+}

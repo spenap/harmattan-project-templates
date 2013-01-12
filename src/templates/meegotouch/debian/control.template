@@ -1,0 +1,13 @@
+Source: #PACKAGENAME#
+Section: user/Other
+Priority: extra
+Maintainer: #MAINTAINER# #EMAIL#
+Build-Depends: debhelper (>= 7), libmeegotouch-dev
+Standards-Version: 3.8.4
+Homepage: <insert the upstream URL, if relevant>
+
+Package: #PACKAGENAME#
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>

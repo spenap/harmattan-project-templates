@@ -1,0 +1,14 @@
+#include <MApplication>
+#include <MApplicationWindow>
+
+#include "#MAINHEADER#"
+
+int main(int argc, char *argv[])
+{
+    MApplication app(argc, argv);
+    MApplicationWindow w;
+    w.show();
+    #CLASSNAME# p;
+    p.appear(&w);
+    return app.exec();
+}

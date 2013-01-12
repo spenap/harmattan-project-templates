@@ -1,0 +1,16 @@
+#ifndef #HEADERBLOCK#
+#define #HEADERBLOCK#
+
+#include <MApplicationPage>
+
+class #CLASSNAME# : public MApplicationPage
+{
+    Q_OBJECT
+
+public:
+    #CLASSNAME#();
+    ~#CLASSNAME#();
+    virtual void createContent();
+};
+
+#endif // #HEADERBLOCK#

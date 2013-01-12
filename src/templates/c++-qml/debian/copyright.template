@@ -1,0 +1,26 @@
+This package was debianized by:
+
+    #MAINTAINER# <#EMAIL#> on #DATE#
+
+It was downloaded from:
+
+    <url://example.com or remove>
+
+Upstream Author(s):
+
+    #MAINTAINER# <#EMAIL#>
+
+Copyright:
+
+    Copyright (C) #YEAR# #MAINTAINER#
+
+License:
+
+    <specify license>
+
+The Debian packaging is:
+
+    Copyright C) #YEAR#, #MAINTAINER# <#EMAIL#>
+
+    <specify license of debianized version or remove>
+

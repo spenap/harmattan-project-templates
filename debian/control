@@ -1,0 +1,15 @@
+Source: project-templates
+Section: unknown
+Priority: extra
+Maintainer: Juha-Pekka Jokela <juha-pekka.jokela@tieto.com>
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.8.0
+Homepage:
+
+Package: project-templates
+Architecture: all
+Depends: python, dpatch
+Recommends: libqt4-dev, libmeegotouch-dev
+Description: A simple Meegotouch / QML project creator.
+ This package provides 3 simple project templates to start writing
+ meegotouch or qml applications for Meego.

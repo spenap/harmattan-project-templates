@@ -1,0 +1,30 @@
+project-templates (0.12-0+0m6) unstable; urgency=low
+
+  * This entry has been added by BIFH queue processor
+    version has been changed to 0.12-0+0m6
+
+ -- BIFH Bot <sysint@maemo.research.nokia.com>  Mon, 08 Aug 2011 11:59:18 +0300
+
+project-templates (0.12-0) unstable; urgency=low
+
+  * Fixed version number for templates
+
+ -- Marina Shalamova <marina.shalamova@tieto.com>  Mon, 08 Aug 2011 11:59:17 +0300
+
+project-templates (0.11-0) unstable; urgency=low
+
+  * Updated dependencies
+
+ -- Juha-Pekka Jokela <juha-pekka.jokela@tieto.com>  Mon, 07 Jun 2011 10:38:07 +0300
+
+project-templates (0.10-0) unstable; urgency=low
+
+  * Fixed to also run on host
+
+ -- Juha-Pekka Jokela <juha-pekka.jokela@tieto.com>  Mon, 16 May 2011 13:01:01 +0300
+
+project-templates (0.9-0) unstable; urgency=low
+
+  * Initial release from new repository
+
+ -- Juha-Pekka Jokela <juha-pekka.jokela@tieto.com>  Mon, 09 May 2011 13:01:01 +0300

@@ -1,0 +1,17 @@
+#include <MApplicationPage>
+
+#include "#MAINHEADER#"
+
+#CLASSNAME#::#CLASSNAME#()
+    : MApplicationPage()
+{
+    setTitle("#WINDOWTITLE#");
+}
+
+void #CLASSNAME#::createContent()
+{
+}
+
+#CLASSNAME#::~#CLASSNAME#()
+{
+}

@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=#SERVICEPREFIX#.#BINARYNAME#
+Exec=/usr/bin/qmlviewer -opengl -fullscreen /usr/qml/#BINARYNAME#/#BINARYNAME#.qml
